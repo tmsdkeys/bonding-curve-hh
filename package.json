@@ -8,10 +8,15 @@
       "compile": "npx hardhat compile",
       "deploy:devnet": "npx hardhat run scripts/deploy.js --network fluent_devnet",
       "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
+      "deploy:bonding-curve:devnet": "npx hardhat run scripts/deploy-bonding-curve.js --network fluent_devnet",
+      "deploy:bonding-curve:local": "npx hardhat run scripts/deploy-bonding-curve.js --network localhost",
       "verify:devnet": "npx hardhat run scripts/verify.js --network fluent_devnet",
       "verify:local": "npx hardhat run scripts/verify.js --network localhost",
       "verify:manual:devnet": "npx hardhat verify --network fluent_devnet",
-      "verify:manual:local": "npx hardhat verify --network localhost"
+      "verify:manual:local": "npx hardhat verify --network localhost",
+      "test:math": "npx hardhat test --grep \"SigmoidMath\"",
+      "test:bonding-curve": "npx hardhat test --grep \"SigmoidBondingCurve\"",
+      "test:gas": "REPORT_GAS=true npx hardhat test"
     },
     "keywords": ["blockchain", "bonding-curve", "ai", "chatbot", "solidity"],
     "author": "",
