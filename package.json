@@ -16,7 +16,10 @@
       "verify:manual:local": "npx hardhat verify --network localhost",
       "test:math": "npx hardhat test --grep \"SigmoidMath\"",
       "test:bonding-curve": "npx hardhat test --grep \"SigmoidBondingCurve\"",
-      "test:gas": "REPORT_GAS=true npx hardhat test"
+      "test:integration": "npx hardhat test --grep \"BondingCurve Integration\"",
+      "test:step-2-3": "npx hardhat test --grep \"Step 2.3\"",
+      "test:gas": "REPORT_GAS=true npx hardhat test",
+      "validate:flow": "npx hardhat test --grep \"token flow validation\""
     },
     "keywords": ["blockchain", "bonding-curve", "ai", "chatbot", "solidity"],
     "author": "",
