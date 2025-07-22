@@ -22,8 +22,11 @@
       "test:step-2-3": "npx hardhat test --grep \"Step 2.3\"",
       "test:ai-chatbot": "npx hardhat test --grep \"AIChatbot\"",
       "test:step-3-1": "npx hardhat test --grep \"AIChatbot - Core Architecture\"",
+      "test:step-3-2": "npx hardhat test --grep \"Step 3.2\"",
+      "test:message-flow": "npx hardhat test --grep \"Message Submission\"",
       "test:gas": "REPORT_GAS=true npx hardhat test",
-      "validate:flow": "npx hardhat test --grep \"token flow validation\""
+      "validate:flow": "npx hardhat test --grep \"token flow validation\"",
+      "validate:messages": "npx hardhat test --grep \"Complete Step 3.2 Validation\""
     },
     "keywords": ["blockchain", "bonding-curve", "ai", "chatbot", "solidity"],
     "author": "",
