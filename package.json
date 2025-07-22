@@ -10,6 +10,8 @@
       "deploy:local": "npx hardhat run scripts/deploy.js --network localhost",
       "deploy:bonding-curve:devnet": "npx hardhat run scripts/deploy-bonding-curve.js --network fluent_devnet",
       "deploy:bonding-curve:local": "npx hardhat run scripts/deploy-bonding-curve.js --network localhost",
+      "deploy:step-3-1:devnet": "npx hardhat run scripts/deploy-step-3-1.js --network fluent_devnet",
+      "deploy:step-3-1:local": "npx hardhat run scripts/deploy-step-3-1.js --network localhost",
       "verify:devnet": "npx hardhat run scripts/verify.js --network fluent_devnet",
       "verify:local": "npx hardhat run scripts/verify.js --network localhost",
       "verify:manual:devnet": "npx hardhat verify --network fluent_devnet",
@@ -18,6 +20,8 @@
       "test:bonding-curve": "npx hardhat test --grep \"SigmoidBondingCurve\"",
       "test:integration": "npx hardhat test --grep \"BondingCurve Integration\"",
       "test:step-2-3": "npx hardhat test --grep \"Step 2.3\"",
+      "test:ai-chatbot": "npx hardhat test --grep \"AIChatbot\"",
+      "test:step-3-1": "npx hardhat test --grep \"AIChatbot - Core Architecture\"",
       "test:gas": "REPORT_GAS=true npx hardhat test",
       "validate:flow": "npx hardhat test --grep \"token flow validation\""
     },
