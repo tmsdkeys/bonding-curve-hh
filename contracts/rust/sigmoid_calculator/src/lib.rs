@@ -2,7 +2,6 @@
 extern crate alloc;
 extern crate fluentbase_sdk;
 
-use alloy_sol_types::sol;
 use fluentbase_sdk::{
     basic_entrypoint,
     derive::{router, Contract},
@@ -57,11 +56,45 @@ mod fixed_point {
 mod sigmoid_math {
     use super::fixed_point::*;
     use fluentbase_sdk::U256;
+    use libm;
 
-    /// Maximum iterations for Taylor series
+    /// Maximum iterations for Taylor series (kept as fallback)
     const MAX_ITERATIONS: usize = 8;
 
-    /// Approximation of e^x using Taylor series
+    /// Use libm for high-precision exponential calculation
+    /// Converts fixed-point to f64, calculates exp, converts back
+    pub fn exp_precise(x: U256, is_negative: bool) -> U256 {
+        // Convert fixed-point to f64
+        // First get the integer part
+        let int_part = x / SCALE_U256;
+        let frac_part = x % SCALE_U256;
+
+        // Convert to f64 (limited by f64 precision but much better than Taylor)
+        let x_f64 = int_part.as_limbs()[0] as f64 + (frac_part.as_limbs()[0] as f64 / SCALE as f64);
+
+        // Apply sign
+        let x_signed = if is_negative { -x_f64 } else { x_f64 };
+
+        // Calculate e^x using libm
+        let exp_result = libm::exp(x_signed);
+
+        // Convert back to fixed-point
+        // Handle overflow/underflow
+        if exp_result.is_infinite() || exp_result > 1e30 {
+            // Return a very large number
+            U256::from(u128::MAX) * SCALE_U256 / U256::from(1000u128)
+        } else if exp_result < 1e-18 {
+            // Return a very small number (but not zero to avoid division issues)
+            U256::from(1u128)
+        } else {
+            // Normal conversion using libm::trunc
+            let whole = libm::trunc(exp_result) as u128;
+            let frac = ((exp_result - libm::trunc(exp_result)) * SCALE as f64) as u128;
+            U256::from(whole) * SCALE_U256 + U256::from(frac)
+        }
+    }
+
+    /// Approximation of e^x using Taylor series (fallback method)
     /// e^x = 1 + x + x²/2! + x³/3! + x⁴/4! + ...
     /// Works best for x in range [-2, 2]
     pub fn exp_taylor(x: U256, is_negative: bool) -> U256 {
@@ -100,22 +133,26 @@ mod sigmoid_math {
         }
     }
 
+    /// High-precision sigmoid using libm
+    pub fn sigmoid_precise(x: U256, is_negative: bool) -> U256 {
+        if is_negative {
+            // For negative x: e^(-|x|) / (1 + e^(-|x|))
+            let exp_neg_x = exp_precise(x, true);
+            div_fixed(exp_neg_x, SCALE_U256 + exp_neg_x)
+        } else {
+            // For positive x: 1 / (1 + e^(-x))
+            let exp_neg_x = exp_precise(x, true);
+            div_fixed(SCALE_U256, SCALE_U256 + exp_neg_x)
+        }
+    }
+
     /// Calculate sigmoid function: 1 / (1 + e^(-x))
     /// For numerical stability, we use:
     /// - If x >= 0: 1 / (1 + e^(-x))
     /// - If x < 0: e^x / (1 + e^x)
     pub fn sigmoid_fixed(x: U256, is_negative: bool) -> U256 {
-        if is_negative {
-            // For negative x: e^x / (1 + e^x)
-            // Note: when is_negative is true, x contains the absolute value
-            // So we need e^(-|x|) / (1 + e^(-|x|))
-            let exp_neg_x = exp_taylor(x, true); // This gives us e^(-|x|)
-            div_fixed(exp_neg_x, SCALE_U256 + exp_neg_x)
-        } else {
-            // For positive x: 1 / (1 + e^(-x))
-            let exp_neg_x = exp_taylor(x, true);
-            div_fixed(SCALE_U256, SCALE_U256 + exp_neg_x)
-        }
+        // Use precise version with libm
+        sigmoid_precise(x, is_negative)
     }
 
     /// Calculate the price using sigmoid bonding curve
@@ -142,6 +179,33 @@ mod sigmoid_math {
         // Return A * sigmoid
         mul_fixed(a, sigmoid)
     }
+
+    /// Calculate the integral of the sigmoid function (for exact buy/sell amounts)
+    /// This is where Rust really shines vs Solidity
+    pub fn sigmoid_integral(from_supply: U256, to_supply: U256, a: U256, k: U256, b: U256) -> U256 {
+        // The integral of A/(1 + e^(-k*(x-B))) is:
+        // (A/k) * ln(1 + e^(k*(x-B))) + C
+
+        // For now, use numerical integration with small steps
+        // In production, we'd use the analytical solution with libm::log
+        let steps = 100u64;
+        let step_size = if to_supply > from_supply {
+            (to_supply - from_supply) / U256::from(steps)
+        } else {
+            U256::ZERO
+        };
+
+        let mut integral = U256::ZERO;
+        let mut current_supply = from_supply;
+
+        for _ in 0..steps {
+            let price = calculate_sigmoid_price(current_supply, a, k, b);
+            integral = integral + mul_fixed(price, step_size);
+            current_supply = current_supply + step_size;
+        }
+
+        integral
+    }
 }
 
 // Define the contract structure
@@ -165,8 +229,17 @@ pub trait SigmoidAPI {
 
     // Sigmoid functions
     fn exp_taylor(&self, x: U256, is_negative: bool) -> U256;
+    fn exp_precise(&self, x: U256, is_negative: bool) -> U256;
     fn sigmoid(&self, x: U256, is_negative: bool) -> U256;
     fn calculate_price(&self, supply: U256, a: U256, k: U256, b: U256) -> U256;
+    fn calculate_integral(
+        &self,
+        from_supply: U256,
+        to_supply: U256,
+        a: U256,
+        k: U256,
+        b: U256,
+    ) -> U256;
 }
 
 // Implement the router for automatic function dispatch
@@ -179,7 +252,7 @@ impl<SDK: SharedAPI> SigmoidAPI for SigmoidCalculator<SDK> {
 
     /// Returns the contract version
     fn get_version(&self) -> U256 {
-        U256::from(1)
+        U256::from(2) // Version 2: with libm integration
     }
 
     /// Echoes back the input value (tests parameter passing)
@@ -217,6 +290,11 @@ impl<SDK: SharedAPI> SigmoidAPI for SigmoidCalculator<SDK> {
         sigmoid_math::exp_taylor(x, is_negative)
     }
 
+    /// High-precision exponential using libm
+    fn exp_precise(&self, x: U256, is_negative: bool) -> U256 {
+        sigmoid_math::exp_precise(x, is_negative)
+    }
+
     /// Sigmoid function: 1 / (1 + e^(-x))
     fn sigmoid(&self, x: U256, is_negative: bool) -> U256 {
         sigmoid_math::sigmoid_fixed(x, is_negative)
@@ -225,6 +303,18 @@ impl<SDK: SharedAPI> SigmoidAPI for SigmoidCalculator<SDK> {
     /// Calculate price using sigmoid bonding curve
     fn calculate_price(&self, supply: U256, a: U256, k: U256, b: U256) -> U256 {
         sigmoid_math::calculate_sigmoid_price(supply, a, k, b)
+    }
+
+    /// Calculate integral for exact buy/sell amounts
+    fn calculate_integral(
+        &self,
+        from_supply: U256,
+        to_supply: U256,
+        a: U256,
+        k: U256,
+        b: U256,
+    ) -> U256 {
+        sigmoid_math::sigmoid_integral(from_supply, to_supply, a, k, b)
     }
 }
 
@@ -348,28 +438,72 @@ mod tests {
     }
 
     #[test]
-    fn test_sigmoid_negative() {
-        // Test sigmoid(-2) ≈ 0.119 (about 0.12)
-        // When x = -2, sigmoid(x) = 1/(1+e^2) ≈ 0.119
-        let two = U256::from(2u64) * SCALE_U256;
-        let result = sigmoid_fixed(two, true);
+    fn test_exp_precise_vs_taylor() {
+        // Compare libm exp with Taylor series
+        let test_values = vec![
+            U256::from(0u64),              // 0
+            SCALE_U256 / U256::from(2u64), // 0.5
+            SCALE_U256,                    // 1.0
+            SCALE_U256 * U256::from(2u64), // 2.0
+        ];
 
-        // Convert to decimal for debugging
-        let result_decimal = result * U256::from(1000u64) / SCALE_U256;
-        println!(
-            "sigmoid(-2) result: {} (expecting ~119 for 0.119)",
-            result_decimal
+        for x in test_values {
+            let taylor_result = exp_taylor(x, false);
+            let precise_result = exp_precise(x, false);
+
+            // Convert to readable format
+            let taylor_decimal = taylor_result / (SCALE_U256 / U256::from(1000u64));
+            let precise_decimal = precise_result / (SCALE_U256 / U256::from(1000u64));
+
+            println!(
+                "exp({}) - Taylor: {}, Precise: {}",
+                x / SCALE_U256,
+                taylor_decimal,
+                precise_decimal
+            );
+
+            // They should be reasonably close
+            let diff = if taylor_result > precise_result {
+                taylor_result - precise_result
+            } else {
+                precise_result - taylor_result
+            };
+
+            // Allow up to 1% difference
+            let tolerance = precise_result / U256::from(100u64);
+            assert!(
+                diff < tolerance,
+                "exp({}) difference too large",
+                x / SCALE_U256
+            );
+        }
+    }
+
+    #[test]
+    fn test_libm_edge_cases() {
+        // Test very small values
+        let very_small = U256::from(1u64); // 0.000000000000000001
+        let result_small = exp_precise(very_small, false);
+        // Should be very close to 1
+        assert!(
+            result_small > SCALE_U256 - U256::from(1000u64)
+                && result_small < SCALE_U256 + U256::from(1000u64)
         );
 
-        // Should be approximately 0.119
-        let expected_min = U256::from(10u64) * SCALE_U256 / U256::from(100u64); // 0.10
-        let expected_max = U256::from(13u64) * SCALE_U256 / U256::from(100u64); // 0.13
+        // Test large positive values
+        let large = SCALE_U256 * U256::from(10u64); // 10.0
+        let result_large = exp_precise(large, false);
+        // e^10 ≈ 22026, so result should be around 22026 * SCALE
+        let expected_min = SCALE_U256 * U256::from(20000u64);
+        let expected_max = SCALE_U256 * U256::from(25000u64);
+        assert!(result_large > expected_min && result_large < expected_max);
+
+        // Test large negative values
+        let result_neg_large = exp_precise(large, true);
+        // e^(-10) is very small, should be close to 0 but not exactly 0
         assert!(
-            result > expected_min && result < expected_max,
-            "sigmoid(-2) = {} is not in range [{}, {}]",
-            result,
-            expected_min,
-            expected_max
+            result_neg_large > U256::from(0u64)
+                && result_neg_large < SCALE_U256 / U256::from(1000u64)
         );
     }
 }

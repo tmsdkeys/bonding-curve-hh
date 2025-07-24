@@ -76,6 +76,14 @@ interface ISigmoidCalculator {
     function expTaylor(uint256 x, bool isNegative) external view returns (uint256);
     
     /**
+     * @notice Calculate e^x using high-precision libm
+     * @param x The exponent in fixed-point
+     * @param isNegative True if x is negative
+     * @return e^x in fixed-point representation
+     */
+    function expPrecise(uint256 x, bool isNegative) external view returns (uint256);
+    
+    /**
      * @notice Calculate sigmoid function: 1 / (1 + e^(-x))
      * @param x Input value in fixed-point
      * @param isNegative True if x is negative
@@ -92,4 +100,15 @@ interface ISigmoidCalculator {
      * @return Price in fixed-point representation
      */
     function calculatePrice(uint256 supply, uint256 a, uint256 k, uint256 b) external view returns (uint256);
+    
+    /**
+     * @notice Calculate integral of sigmoid curve between two supply points
+     * @param fromSupply Starting supply
+     * @param toSupply Ending supply
+     * @param a Maximum price (with decimals)
+     * @param k Steepness factor (with decimals)
+     * @param b Inflection point (with decimals)
+     * @return Integral value (total cost/revenue)
+     */
+    function calculateIntegral(uint256 fromSupply, uint256 toSupply, uint256 a, uint256 k, uint256 b) external view returns (uint256);
 }
