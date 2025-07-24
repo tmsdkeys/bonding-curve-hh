@@ -1,0 +1,32 @@
+[package]
+name = "sigmoid-calculator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fluentbase-sdk = { git = "https://github.com/fluentlabs-xyz/fluentbase", default-features = false }
+alloy-sol-types = { version = "0.7", default-features = false }
+alloc = { version = "1.0", default-features = false }
+
+[dev-dependencies]
+fluentbase-sdk = { git = "https://github.com/fluentlabs-xyz/fluentbase", features = ["testing"] }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[features]
+default = []
+
+# Required for no_std
+[profile.dev]
+panic = "abort"
+
+[profile.test]
+panic = "unwind"
