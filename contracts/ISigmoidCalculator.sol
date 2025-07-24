@@ -64,4 +64,32 @@ interface ISigmoidCalculator {
      * @return Scale factor (10^18)
      */
     function scale() external view returns (uint256);
+    
+    // ============ Sigmoid Functions ============
+    
+    /**
+     * @notice Calculate e^x using Taylor series approximation
+     * @param x The exponent in fixed-point
+     * @param isNegative True if x is negative
+     * @return e^x in fixed-point representation
+     */
+    function expTaylor(uint256 x, bool isNegative) external view returns (uint256);
+    
+    /**
+     * @notice Calculate sigmoid function: 1 / (1 + e^(-x))
+     * @param x Input value in fixed-point
+     * @param isNegative True if x is negative
+     * @return Sigmoid(x) in fixed-point representation
+     */
+    function sigmoid(uint256 x, bool isNegative) external view returns (uint256);
+    
+    /**
+     * @notice Calculate price using sigmoid bonding curve
+     * @param supply Current token supply
+     * @param a Maximum price (with decimals)
+     * @param k Steepness factor (with decimals)
+     * @param b Inflection point (with decimals)
+     * @return Price in fixed-point representation
+     */
+    function calculatePrice(uint256 supply, uint256 a, uint256 k, uint256 b) external view returns (uint256);
 }
